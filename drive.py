@@ -22,6 +22,8 @@ DRIVE_RO_SCOPE = 'https://www.googleapis.com/auth/drive.readonly'
 
 REDIRECT_URI='urn:ietf:wg:oauth:2.0:oob'
 
+import logging
+
 class GoogleDrive(object):
     def __init__(self,
             client_id,
@@ -113,7 +115,7 @@ class GoogleDrive(object):
             'redirect_uri': REDIRECT_URI,
             'grant_type': 'authorization_code',
             })
-        
+
         if not r:
             raise ValueError('failed to authenticate')
 
@@ -146,6 +148,24 @@ class GoogleDrive(object):
         if not r:
             raise ValueError('failed to validate')
 
+    def children(self, fid, pageToken=None):
+        '''Return an iterator over the files in a Google Drive folder.'''
+        logging.debug("Children query: fid: %s : page token: %s", fid, pageToken)
+
+        query = '%s/files/%s/children?maxResults=10&orderBy=createdDate' % (DRIVE_URI, fid)
+        if pageToken is not None:
+            query += "&pageToken=%s" % pageToken
+
+        r = self.session.get(query).json()
+
+        for cspec in r['items']:
+            yield cspec
+
+        if 'nextPageToken' in r:
+            logging.debug("NEXT PAGE TOKEN: %s", r["nextPageToken"])
+            for cspec in self.children(fid, r['nextPageToken']):
+                yield cspec
+
     def files(self):
         '''Return an iterator over the files in Google Drive.'''
 
@@ -162,9 +182,12 @@ class GoogleDrive(object):
     def revisions(self, fid):
         '''Return an iterator over the revisions of a file
         identified by its ID.'''
+        # TODO this is paginated handle it
 
         r = self.session.get('%s/files/%s/revisions' % (
             DRIVE_URI, fid)).json()
+
+        logging.info("Revisions: %d : %s", len(r['items']), fid)
 
         for rev in r['items']:
             yield rev
