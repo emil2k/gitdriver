@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import calendar
 import os
 import errno
 import sys
@@ -60,7 +61,8 @@ class EventCommitter:
         self.repo.index.add(os.path.relpath(filepath, self.repo.workdir))
         self.repo.index.write()
         tree = self.repo.index.write_tree()
-        author = git.Signature(rev["lastModifyingUser"]["displayName"], rev["lastModifyingUser"]["emailAddress"]) # TODO use modifiedDate for time
+        mt = rfc3339.parse(rev["modifiedDate"])
+        author = git.Signature(rev["lastModifyingUser"]["displayName"], rev["lastModifyingUser"]["emailAddress"], calendar.timegm(mt.utctimetuple()), mt.utcoffset().seconds/60)
         parents = [] if self.last_commit is None else [self.last_commit]
         message = 'revision from %s' % rev['modifiedDate']
         self.last_commit = self.repo.create_commit("refs/heads/master", author, author, message, tree, parents)
