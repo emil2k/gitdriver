@@ -1,6 +1,8 @@
 cffi==1.11.2
 pycparser==2.18
 pygit2==0.26.0
+pyRFC3339==1.0
+pytz==2017.2
 PyYAML==3.11
 requests==2.9.1
 six==1.11.0
