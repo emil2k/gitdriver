@@ -152,7 +152,7 @@ class GoogleDrive(object):
         '''Return an iterator over the files in a Google Drive folder.'''
         logging.debug("Children query: fid: %s : page token: %s", fid, pageToken)
 
-        query = '%s/files/%s/children?maxResults=10&orderBy=createdDate' % (DRIVE_URI, fid)
+        query = '%s/files/%s/children?maxResults=100&orderBy=createdDate' % (DRIVE_URI, fid)
         if pageToken is not None:
             query += "&pageToken=%s" % pageToken
 
@@ -162,7 +162,6 @@ class GoogleDrive(object):
             yield cspec
 
         if 'nextPageToken' in r:
-            logging.debug("NEXT PAGE TOKEN: %s", r["nextPageToken"])
             for cspec in self.children(fid, r['nextPageToken']):
                 yield cspec
 
@@ -179,18 +178,23 @@ class GoogleDrive(object):
 
         return self.session.get('%s/files/%s' % (DRIVE_URI, fid)).json()
 
-    def revisions(self, fid):
+    def revisions(self, fid, pageToken=None):
         '''Return an iterator over the revisions of a file
         identified by its ID.'''
-        # TODO this is paginated handle it
+        logging.debug("Revisions query: fid: %s : page token: %s", fid, pageToken)
 
-        r = self.session.get('%s/files/%s/revisions' % (
-            DRIVE_URI, fid)).json()
+        query = '%s/files/%s/revisions?maxResults=200' % (DRIVE_URI, fid)
+        if pageToken is not None:
+            query += "&pageToken=%s" % pageToken
 
-        logging.info("Revisions: %d : %s", len(r['items']), fid)
+        r = self.session.get(query).json()
 
-        for rev in r['items']:
-            yield rev
+        for rspec in r['items']:
+            yield rspec
+
+        if 'nextPageToken' in r:
+            for rspec in self.revisions(fid, r['nextPageToken']):
+                yield rspec
 
 if __name__ == '__main__':
     cfg = yaml.load(open('gd.conf'))
