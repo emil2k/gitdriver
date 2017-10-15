@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import calendar
+import codecs
 import os
 import errno
 import sys
@@ -35,14 +36,19 @@ class EventCommitter:
         self.repo = repo
         self.last_commit = None
 
-    def commit_revision(self, filepath, rev):
+    @staticmethod
+    def prep_directory_for_file(filepath):
         try:
             os.makedirs(os.path.dirname(filepath))
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
-        with open(filepath, 'w') as fd:
+
+    def commit_revision(self, filepath, rev):
+        EventCommitter.prep_directory_for_file(filepath)
+        with open(filepath, "w") as fd:
             if 'exportLinks' in rev and not self.opts.raw:
+                r = None
                 for mt in self.opts.mime_type:
                     if mt in rev["exportLinks"]:
                         r = self.gd.session.get(rev["exportLinks"][mt])
@@ -57,7 +63,7 @@ class EventCommitter:
             # Write file content into local file.
             for chunk in r.iter_content():
                 fd.write(chunk)
-        # Commit changes to repository.
+        # Commit changes to repository
         self.repo.index.add(os.path.relpath(filepath, self.repo.workdir))
         self.repo.index.write()
         tree = self.repo.index.write_tree()
@@ -68,11 +74,55 @@ class EventCommitter:
         self.last_commit = self.repo.create_commit("refs/heads/master", author, author, message, tree, parents)
         logging.info("Commit revision: %s : %s", self.last_commit, message)
 
+    def commit_comment(self, filepath, comment):
+        EventCommitter.prep_directory_for_file(filepath)
+        with codecs.open(filepath, "w", "utf8") as fd:
+            if "context" in comment:
+                fd.write(u"#Context\n%s\n\n" % comment["context"]["value"])
+            fd.write(u"---\n##Comment by %s at %s:\n%s\n\n" % (comment["author"]["displayName"], comment["createdDate"], comment["content"]))
+        # Commit changes to repository
+        self.repo.index.add(os.path.relpath(filepath, self.repo.workdir))
+        self.repo.index.write()
+        tree = self.repo.index.write_tree()
+        mt = rfc3339.parse(comment["createdDate"])
+        author = git.Signature(comment["author"]["displayName"], "n/a", calendar.timegm(mt.utctimetuple()), mt.utcoffset().seconds/60)
+        parents = [] if self.last_commit is None else [self.last_commit]
+        message = "Comment by %s" % comment["author"]["displayName"]
+        self.last_commit = self.repo.create_commit("refs/heads/master", author, author, message, tree, parents)
+        logging.info("Commit comment: %s : %s", self.last_commit, message)
+
+    def commit_reply(self, filepath, reply):
+        EventCommitter.prep_directory_for_file(filepath)
+        with codecs.open(filepath, "a", "utf8") as fd:
+            if "verb" in reply:
+                if reply["verb"] == "resolve":
+                    fd.write(u"---\n##Resolved by %s at %s:\n\n" % (reply["author"]["displayName"], reply["createdDate"]))
+                    message = "Resolved by %s" % reply["author"]["displayName"]
+                elif reply["verb"] == "reopen":
+                    fd.write(u"---\n##Reopened by %s at %s:\n\n" % (reply["author"]["displayName"], reply["createdDate"]))
+                    message = "Reopened by %s" % reply["author"]["displayName"]
+            else:
+                fd.write(u"---\n##Reply by %s at %s:\n%s\n\n" % (reply["author"]["displayName"], reply["createdDate"], reply["content"]))
+                message = "Reply by %s" % reply["author"]["displayName"]
+        # Commit changes to repository
+        self.repo.index.add(os.path.relpath(filepath, self.repo.workdir))
+        self.repo.index.write()
+        tree = self.repo.index.write_tree()
+        mt = rfc3339.parse(reply["createdDate"])
+        author = git.Signature(reply["author"]["displayName"], "n/a", calendar.timegm(mt.utctimetuple()), mt.utcoffset().seconds/60)
+        parents = [] if self.last_commit is None else [self.last_commit]
+        self.last_commit = self.repo.create_commit("refs/heads/master", author, author, message, tree, parents)
+        logging.info("Commit reply: %s : %s", self.last_commit, message)
+
     def commit(self, events):
         for event in events:
             filepath = os.path.join(self.repo.workdir, event["xFilePath"])
             if event["kind"] == "drive#revision":
                 self.commit_revision(filepath, event)
+            elif event["kind"] == "drive#comment":
+                self.commit_comment(filepath, event)
+            elif event["kind"] == "drive#commentReply":
+                self.commit_reply(filepath, event)
             else:
                 raise ValueError("unexpected event kind: %s" % event["kind"])
 
@@ -84,10 +134,17 @@ class EventScanner:
         self._events = []
 
     def scan_file(self, fid, filepath):
-        # Iterate over the revisions.
+        # Scan revisions
         for rev in self.gd.revisions(fid):
             rev["xFilePath"] = filepath
             self._events.append(rev)
+        # Scan comments
+        for comment in self.gd.comments(fid):
+            comment["xFilePath"] = os.path.join(filepath + "_comments", comment["commentId"].lower() + ".md")
+            self._events.append(comment)
+            for reply in comment["replies"]:
+                reply["xFilePath"] = comment["xFilePath"]
+                self._events.append(reply)
 
     def scan_folder(self, fid, filepath):
         # Process folder
@@ -104,9 +161,18 @@ class EventScanner:
             logging.info("Process file: %s : %s : %s", rid, md["title"], filepath)
             self.scan_file(rid, filepath)
 
+    @staticmethod
+    def _event_sort_key(event):
+        if event["kind"] == "drive#revision":
+            return rfc3339.parse(event["modifiedDate"])
+        elif event["kind"] == "drive#comment" or event["kind"] == "drive#commentReply":
+            return rfc3339.parse(event["createdDate"])
+        else:
+            raise ValueError("unexpected event kind: %s" % event["kind"])
+
     @property
     def events(self):
-        self._events.sort(key=lambda x: rfc3339.parse(x["modifiedDate"]))
+        self._events.sort(key=EventScanner._event_sort_key)
         return self._events
 
 if __name__ == '__main__':

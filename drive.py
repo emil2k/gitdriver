@@ -165,13 +165,22 @@ class GoogleDrive(object):
             for cspec in self.children(fid, r['nextPageToken']):
                 yield cspec
 
-    def files(self):
-        '''Return an iterator over the files in Google Drive.'''
+    def comments(self, fid, pageToken=None):
+        '''Return an iterator over the comments on a Google Drive file.'''
+        logging.debug("Comments query: fid: %s : page token: %s", fid, pageToken)
 
-        r = self.session.get('%s/files' % DRIVE_URI).json()
+        query = '%s/files/%s/comments?maxResults=100&includeDeleted=true' % (DRIVE_URI, fid)
+        if pageToken is not None:
+            query += "&pageToken=%s" % pageToken
 
-        for fspec in r['items']:
-            yield fspec
+        r = self.session.get(query).json()
+
+        for cspec in r['items']:
+            yield cspec
+
+        if 'nextPageToken' in r:
+            for cspec in self.comments(fid, r['nextPageToken']):
+                yield cspec
 
     def get_file_metadata(self, fid):
         '''Return the file metadata for a file identified by its ID.'''
