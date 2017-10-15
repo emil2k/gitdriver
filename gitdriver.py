@@ -60,7 +60,7 @@ class EventCommitter:
         self.repo.index.add(os.path.relpath(filepath, self.repo.workdir))
         self.repo.index.write()
         tree = self.repo.index.write_tree()
-        author = git.Signature("Unknown", "unknown email") # TODO use the last modifying user
+        author = git.Signature(rev["lastModifyingUser"]["displayName"], rev["lastModifyingUser"]["emailAddress"]) # TODO use modifiedDate for time
         parents = [] if self.last_commit is None else [self.last_commit]
         message = 'revision from %s' % rev['modifiedDate']
         self.last_commit = self.repo.create_commit("refs/heads/master", author, author, message, tree, parents)
