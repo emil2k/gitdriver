@@ -18,14 +18,14 @@ import logging
 import json
 
 def parse_args():
-    p = argparse.ArgumentParser()
-    p.add_argument('--config', '-c', default='gd.conf')
-    p.add_argument('--verbose', '-v', action='store_true')
-    p.add_argument('--force', '-f', action='store_true', help='force overwrite of old output repository')
-    p.add_argument('--output', '-o', required=True, help='directory where to output git repository')
-    p.add_argument('--mime-type', dest='mime_type', action='append', required=True, help='preferred mime types')
-    p.add_argument('--raw', '-R', action='store_true', help='Download original document if possible.')
-    p.add_argument('id', help='ID of document or folder')
+    p = argparse.ArgumentParser(description="Tool to collect revisions from a Google Drive file or folder into a git repository.")
+    p.add_argument("--config", "-c", default="gd.conf")
+    p.add_argument("--verbose", "-v", action="store_true")
+    p.add_argument("--force", "-f", action="store_true", help="force overwrite of old output repository")
+    p.add_argument("--output", "-o", required=True, help="directory where to output git repository")
+    p.add_argument("--mime-type", dest="mime_type", action="append", required=True, help="preferred mime types, in order of preference")
+    p.add_argument("--raw", "-R", action="store_true", help="download original document if possible")
+    p.add_argument("id", help="id of google drive document or folder")
     return p.parse_args()
 
 class EventCommitter:
@@ -47,7 +47,7 @@ class EventCommitter:
     def commit_revision(self, filepath, rev):
         EventCommitter.prep_directory_for_file(filepath)
         with open(filepath, "w") as fd:
-            if 'exportLinks' in rev and not self.opts.raw:
+            if "exportLinks" in rev and not self.opts.raw:
                 r = None
                 for mt in self.opts.mime_type:
                     if mt in rev["exportLinks"]:
@@ -55,11 +55,11 @@ class EventCommitter:
                         break
                 if r is None:
                     raise KeyError("mime type(s) %s not found in %s" % (self.opts.mime_type, rev["exportLinks"].keys()))
-            elif 'downloadUrl' in rev:
+            elif "downloadUrl" in rev:
                 # Otherwise, if there is a downloadUrl, use that.
-                r = self.gd.session.get(rev['downloadUrl'])
+                r = self.gd.session.get(rev["downloadUrl"])
             else:
-                raise KeyError('unable to download revision')
+                raise KeyError("unable to download revision")
             # Write file content into local file.
             for chunk in r.iter_content():
                 fd.write(chunk)
@@ -175,7 +175,7 @@ class EventScanner:
         self._events.sort(key=EventScanner._event_sort_key)
         return self._events
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     opts = parse_args()
     logging.basicConfig(level=logging.DEBUG if opts.verbose else logging.INFO, format=u"%(relativeCreated)dms: %(message)s")
 
@@ -191,8 +191,8 @@ if __name__ == '__main__':
     # Establish our credentials.
     cfg = yaml.load(open(opts.config))
     gd = GoogleDrive(
-            client_id=cfg['googledrive']['client id'],
-            client_secret=cfg['googledrive']['client secret'],
+            client_id=cfg["googledrive"]["client id"],
+            client_secret=cfg["googledrive"]["client secret"],
             scopes=[DRIVE_RW_SCOPE],
             )
     gd.authenticate()
