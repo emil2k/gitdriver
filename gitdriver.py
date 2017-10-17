@@ -70,7 +70,7 @@ class EventCommitter:
         mt = rfc3339.parse(rev["modifiedDate"])
         author = git.Signature(rev["lastModifyingUser"]["displayName"], rev["lastModifyingUser"]["emailAddress"], calendar.timegm(mt.utctimetuple()), mt.utcoffset().seconds/60)
         parents = [] if self.last_commit is None else [self.last_commit]
-        message = 'revision from %s' % rev['modifiedDate']
+        message = "Revision by %s" % rev["lastModifyingUser"]["displayName"]
         self.last_commit = self.repo.create_commit("refs/heads/master", author, author, message, tree, parents)
         logging.info("Commit revision: %s : %s", self.last_commit, message)
 
